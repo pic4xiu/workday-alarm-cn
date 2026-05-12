@@ -4,9 +4,10 @@ set -euo pipefail
 TIME_VALUE="${1:-07:30}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
-LABEL="com.local.shift-alarm"
+LABEL="com.local.workday-alarm-cn"
 PLIST_PATH="$HOME/Library/LaunchAgents/${LABEL}.plist"
 LOG_DIR="$HOME/Library/Logs"
+LOG_PREFIX="workday-alarm-cn"
 
 if [[ ! "$TIME_VALUE" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
   echo "时间格式应为 HH:MM，例如 07:30" >&2
@@ -42,9 +43,9 @@ cat > "$PLIST_PATH" <<PLIST
     <integer>${MINUTE}</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>${LOG_DIR}/shift-alarm.out.log</string>
+  <string>${LOG_DIR}/${LOG_PREFIX}.out.log</string>
   <key>StandardErrorPath</key>
-  <string>${LOG_DIR}/shift-alarm.err.log</string>
+  <string>${LOG_DIR}/${LOG_PREFIX}.err.log</string>
   <key>RunAtLoad</key>
   <false/>
 </dict>
@@ -56,4 +57,4 @@ launchctl load "$PLIST_PATH"
 
 echo "已安装 ${LABEL}，每天 ${TIME_VALUE} 执行。"
 echo "配置文件：${SCRIPT_DIR}/config.json"
-echo "日志：${LOG_DIR}/shift-alarm.out.log"
+echo "日志：${LOG_DIR}/${LOG_PREFIX}.out.log"
