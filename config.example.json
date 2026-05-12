@@ -1,0 +1,14 @@
+{
+  "bark_key": "",
+  "bark_base_url": "https://api.day.app",
+  "title": "调休闹钟",
+  "body": "今天需要上班，别睡过啦",
+  "notify_mode": "workdays",
+  "sound": "chime",
+  "level": "critical",
+  "volume": "5",
+  "call": "1",
+  "group": "shift-alarm",
+  "timezone": "Asia/Shanghai",
+  "holiday_file": "holidays.cn.2026.json"
+}
