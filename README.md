@@ -37,12 +37,28 @@ cp config.example.json config.json
 export BARK_KEY="你的BarkKey"
 ```
 
+建议把项目放在非 `~/Documents`、`~/Desktop`、`~/Downloads` 的目录中运行，例如：
+
+```bash
+mkdir -p ~/.local/share
+cp -R workday-alarm-cn ~/.local/share/workday-alarm-cn
+cd ~/.local/share/workday-alarm-cn
+```
+
+macOS 可能会限制 launchd 后台任务访问 `Documents` 等隐私保护目录。
+
 ## 手动测试
 
 只判断，不真正推送：
 
 ```bash
 python3 alarm.py --date 2026-05-09 --dry-run
+```
+
+`--dry-run` 默认会隐藏 Bark key。如果确实需要查看完整 URL，可以加：
+
+```bash
+python3 alarm.py --date 2026-05-09 --dry-run --show-secret-url
 ```
 
 测试普通休息日：
@@ -105,7 +121,7 @@ python3 -m unittest discover
 卸载定时任务：
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
 rm ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
 ```
 
@@ -118,6 +134,12 @@ rm ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
 3. 如果不在提醒窗口，静默退出。
 4. 如果今天已经推送过，静默退出，避免同一天重复提醒。
 5. 如果进入目标分钟，再判断今天是否应上班。
+
+静默检查默认不写日志，避免每分钟产生大量输出。需要调试时可以手动运行：
+
+```bash
+python3 alarm.py --check-time --verbose
+```
 
 工作日判断优先级：
 

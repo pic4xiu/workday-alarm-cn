@@ -18,8 +18,6 @@ fi
 
 HOUR="${TIME_VALUE%:*}"
 MINUTE="${TIME_VALUE#*:}"
-HOUR="$((10#$HOUR))"
-MINUTE="$((10#$MINUTE))"
 
 mkdir -p "$HOME/Library/LaunchAgents" "$LOG_DIR"
 

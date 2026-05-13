@@ -172,6 +172,13 @@ def build_bark_url(config: dict[str, Any], target_date: date, reason: str) -> st
     return path
 
 
+def mask_bark_url(url: str, config: dict[str, Any]) -> str:
+    bark_key = str(config.get("bark_key", "")).strip()
+    if not bark_key:
+        return url
+    return url.replace(f"/{quote(bark_key, safe='')}/", "/***/", 1)
+
+
 def send_bark(url: str, timeout: int = 10) -> str:
     with urlopen(url, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")
@@ -214,6 +221,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="只输出判断结果，不调用 Bark")
     parser.add_argument("--force", action="store_true", help="忽略日期判断，强制发送 Bark")
     parser.add_argument("--check-time", action="store_true", help="只在配置的 alarm_time 对应分钟内运行，用于 launchd 轮询")
+    parser.add_argument("--verbose", action="store_true", help="输出非提醒窗口、今日已推送等静默检查结果")
+    parser.add_argument("--show-secret-url", action="store_true", help="dry-run 时显示包含 Bark key 的完整 URL")
     args = parser.parse_args()
 
     config_path = resolve_path(args.config, Path.cwd())
@@ -233,33 +242,35 @@ def main() -> int:
     state_path = resolve_path(str(config.get("state_file", ".workday-alarm-state.json")), ROOT)
 
     if args.check_time and not args.force and not args.date and not should_run_in_alarm_window(now, alarm_time, alarm_window_minutes):
-        print(
-            json.dumps(
-                {
-                    "date": target_date.isoformat(),
-                    "should_notify": False,
-                    "reason": "非提醒窗口",
-                    "alarm_time": alarm_time.strftime("%H:%M"),
-                    "alarm_window_minutes": alarm_window_minutes,
-                    "now": now.strftime("%H:%M"),
-                },
-                ensure_ascii=False,
+        if args.verbose:
+            print(
+                json.dumps(
+                    {
+                        "date": target_date.isoformat(),
+                        "should_notify": False,
+                        "reason": "非提醒窗口",
+                        "alarm_time": alarm_time.strftime("%H:%M"),
+                        "alarm_window_minutes": alarm_window_minutes,
+                        "now": now.strftime("%H:%M"),
+                    },
+                    ensure_ascii=False,
+                )
             )
-        )
         return 0
 
     if args.check_time and not args.force and already_sent(state_path, target_date):
-        print(
-            json.dumps(
-                {
-                    "date": target_date.isoformat(),
-                    "should_notify": False,
-                    "reason": "今日已推送",
-                    "state_file": str(state_path),
-                },
-                ensure_ascii=False,
+        if args.verbose:
+            print(
+                json.dumps(
+                    {
+                        "date": target_date.isoformat(),
+                        "should_notify": False,
+                        "reason": "今日已推送",
+                        "state_file": str(state_path),
+                    },
+                    ensure_ascii=False,
+                )
             )
-        )
         return 0
 
     decision = decide(target_date, holiday_days, notify_mode)
@@ -283,7 +294,10 @@ def main() -> int:
 
     if args.dry_run:
         if str(config.get("bark_key", "")).strip():
-            print(f"dry-run: {build_bark_url(config, target_date, decision.reason)}")
+            url = build_bark_url(config, target_date, decision.reason)
+            if not args.show_secret_url:
+                url = mask_bark_url(url, config)
+            print(f"dry-run: {url}")
         else:
             print("dry-run: would send Bark notification; bark_key is not configured")
         return 0

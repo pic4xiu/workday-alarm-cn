@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from alarm import decide, load_holiday_days, should_run_in_alarm_window
+from alarm import build_bark_url, decide, load_holiday_days, mask_bark_url, should_run_in_alarm_window
 
 
 HOLIDAYS = load_holiday_days(Path(__file__).resolve().parents[1] / "holidays.cn.2026.json")
@@ -47,6 +47,18 @@ class AlarmDecisionTests(unittest.TestCase):
         self.assertTrue(should_run_in_alarm_window(datetime(2026, 5, 13, 9, 10, 0), time(9, 10), 10))
         self.assertTrue(should_run_in_alarm_window(datetime(2026, 5, 13, 9, 19, 59), time(9, 10), 10))
         self.assertFalse(should_run_in_alarm_window(datetime(2026, 5, 13, 9, 20, 0), time(9, 10), 10))
+
+    def test_mask_bark_url_hides_key(self):
+        config = {
+            "bark_key": "secret-key",
+            "bark_base_url": "https://api.day.app",
+            "title": "调休闹钟",
+            "body": "{date} {reason}",
+        }
+        url = build_bark_url(config, date(2026, 5, 9), "调休补班日")
+        masked = mask_bark_url(url, config)
+        self.assertIn("/***/", masked)
+        self.assertNotIn("secret-key", masked)
 
 
 if __name__ == "__main__":
