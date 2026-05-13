@@ -46,8 +46,13 @@ cat > "$PLIST_PATH" <<PLIST
 PLIST
 
 CONFIG_PATH="${SCRIPT_DIR}/config.json"
+EXAMPLE_CONFIG_PATH="${SCRIPT_DIR}/config.example.json"
+if [[ ! -f "$CONFIG_PATH" && -f "$EXAMPLE_CONFIG_PATH" ]]; then
+  cp "$EXAMPLE_CONFIG_PATH" "$CONFIG_PATH"
+fi
+
 if [[ -f "$CONFIG_PATH" ]]; then
-  /usr/bin/python3 - "$CONFIG_PATH" "$TIME_VALUE" <<'PY'
+  "$PYTHON_BIN" - "$CONFIG_PATH" "$TIME_VALUE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -58,6 +63,9 @@ config = json.loads(config_path.read_text(encoding="utf-8"))
 config["alarm_time"] = alarm_time
 config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
+else
+  echo "未找到 config.json 或 config.example.json，请先创建配置文件。" >&2
+  exit 1
 fi
 
 launchctl bootout "${LAUNCHD_DOMAIN}" "$PLIST_PATH" >/dev/null 2>&1 || true

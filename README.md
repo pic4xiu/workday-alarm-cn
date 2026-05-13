@@ -31,11 +31,13 @@ cp config.example.json config.json
 
 `config.json` 包含个人 Bark key，已被 `.gitignore` 忽略，请不要提交到公开仓库。
 
-也可以不写入配置文件，改用环境变量：
+手动测试时也可以不写入配置文件，改用环境变量：
 
 ```bash
 export BARK_KEY="你的BarkKey"
 ```
+
+定时任务建议写入 `config.json`。launchd 后台任务不会自动继承你在 shell 里临时 `export` 的环境变量。
 
 建议把项目放在非 `~/Documents`、`~/Desktop`、`~/Downloads` 的目录中运行，例如：
 
@@ -101,7 +103,7 @@ python3 -m unittest discover
 ./install_launchd.sh 07:15
 ```
 
-安装脚本会把目标时间写入 `config.json` 的 `alarm_time` 字段。使用每分钟检查而不是 macOS 日历触发，是为了避免部分 macOS 用户会话中 `StartCalendarInterval` 不稳定触发的问题。
+如果 `config.json` 不存在，安装脚本会从 `config.example.json` 创建一份。安装脚本会把目标时间写入 `config.json` 的 `alarm_time` 字段。使用每分钟检查而不是 macOS 日历触发，是为了避免部分 macOS 用户会话中 `StartCalendarInterval` 不稳定触发的问题。
 
 脚本大多数分钟会静默退出，只有进入提醒窗口后才会继续判断是否工作日并调用 Bark。
 
@@ -181,6 +183,13 @@ python3 alarm.py --check-time --verbose
 - `call=1`：连续播放提醒音，适合闹钟场景。
 
 如果不想使用关键提醒，可以从 `config.json` 中删除 `level`、`volume` 和 `call`。
+
+## 安全和隐私
+
+- `config.json` 包含 Bark key，已被 `.gitignore` 忽略，不应提交到公开仓库。
+- `--dry-run` 默认隐藏 Bark key。
+- `--show-secret-url` 会显示完整 Bark URL，分享日志或截图前请谨慎使用。
+- 默认日志不会输出 Bark key；只有提醒判断结果和 Bark API 响应。
 
 ## 数据来源
 
