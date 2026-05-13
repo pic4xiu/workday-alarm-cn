@@ -4,6 +4,7 @@
   "title": "调休闹钟",
   "body": "今天需要上班，别睡过啦",
   "alarm_time": "09:10",
+  "alarm_window_minutes": 10,
   "notify_mode": "workdays",
   "sound": "chime",
   "level": "critical",

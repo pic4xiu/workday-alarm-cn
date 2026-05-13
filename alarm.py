@@ -4,7 +4,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
     "title": "调休闹钟",
     "body": "今天需要上班，别睡过啦",
     "alarm_time": "09:10",
+    "alarm_window_minutes": 10,
     "notify_mode": "workdays",
     "sound": "chime",
     "level": "critical",
@@ -176,8 +177,13 @@ def send_bark(url: str, timeout: int = 10) -> str:
         return response.read().decode("utf-8", errors="replace")
 
 
-def should_run_for_current_minute(now: datetime, alarm_time: time) -> bool:
-    return now.hour == alarm_time.hour and now.minute == alarm_time.minute
+def should_run_in_alarm_window(now: datetime, alarm_time: time, window_minutes: int) -> bool:
+    if window_minutes < 1:
+        raise ValueError("alarm_window_minutes 必须大于等于 1")
+
+    window_start = datetime.combine(now.date(), alarm_time, tzinfo=now.tzinfo)
+    window_end = window_start + timedelta(minutes=window_minutes)
+    return window_start <= now < window_end
 
 
 def already_sent(state_path: Path, target_date: date) -> bool:
@@ -223,16 +229,18 @@ def main() -> int:
     now = now_in_timezone(timezone)
     target_date = args.date or now.date()
     alarm_time = parse_time(str(config.get("alarm_time", DEFAULT_CONFIG["alarm_time"])))
+    alarm_window_minutes = int(config.get("alarm_window_minutes", DEFAULT_CONFIG["alarm_window_minutes"]))
     state_path = resolve_path(str(config.get("state_file", ".workday-alarm-state.json")), ROOT)
 
-    if args.check_time and not args.force and not args.date and not should_run_for_current_minute(now, alarm_time):
+    if args.check_time and not args.force and not args.date and not should_run_in_alarm_window(now, alarm_time, alarm_window_minutes):
         print(
             json.dumps(
                 {
                     "date": target_date.isoformat(),
                     "should_notify": False,
-                    "reason": "非提醒时间",
+                    "reason": "非提醒窗口",
                     "alarm_time": alarm_time.strftime("%H:%M"),
+                    "alarm_window_minutes": alarm_window_minutes,
                     "now": now.strftime("%H:%M"),
                 },
                 ensure_ascii=False,

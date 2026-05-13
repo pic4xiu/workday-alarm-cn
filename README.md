@@ -87,6 +87,8 @@ python3 -m unittest discover
 
 安装脚本会把目标时间写入 `config.json` 的 `alarm_time` 字段。使用每分钟检查而不是 macOS 日历触发，是为了避免部分 macOS 用户会话中 `StartCalendarInterval` 不稳定触发的问题。
 
+默认允许 10 分钟触发窗口。比如 `alarm_time` 是 `09:10` 时，只要程序在 `09:10` 到 `09:19` 之间运行且当天尚未推送，就会发送提醒。可以通过 `alarm_window_minutes` 调整窗口长度。
+
 安装后会生成：
 
 ```text
@@ -112,8 +114,8 @@ rm ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
 判断优先级：
 
 1. launchd 每 60 秒运行一次 `alarm.py --check-time`。
-2. 程序先判断当前时间是否等于 `config.json` 中的 `alarm_time`。
-3. 如果不是目标分钟，静默退出。
+2. 程序先判断当前时间是否落在 `config.json` 中 `alarm_time` 开始的提醒窗口内。
+3. 如果不在提醒窗口，静默退出。
 4. 如果今天已经推送过，静默退出，避免同一天重复提醒。
 5. 如果进入目标分钟，再判断今天是否应上班。
 
