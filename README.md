@@ -73,7 +73,7 @@ python3 -m unittest discover
 
 ## 安装定时任务
 
-默认每天 `07:30` 执行：
+默认每 60 秒检查一次，并在每天 `07:30` 符合条件时推送：
 
 ```bash
 ./install_launchd.sh
@@ -84,6 +84,8 @@ python3 -m unittest discover
 ```bash
 ./install_launchd.sh 07:15
 ```
+
+安装脚本会把目标时间写入 `config.json` 的 `alarm_time` 字段。使用每分钟检查而不是 macOS 日历触发，是为了避免部分 macOS 用户会话中 `StartCalendarInterval` 不稳定触发的问题。
 
 安装后会生成：
 
@@ -109,6 +111,14 @@ rm ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
 
 判断优先级：
 
+1. launchd 每 60 秒运行一次 `alarm.py --check-time`。
+2. 程序先判断当前时间是否等于 `config.json` 中的 `alarm_time`。
+3. 如果不是目标分钟，静默退出。
+4. 如果今天已经推送过，静默退出，避免同一天重复提醒。
+5. 如果进入目标分钟，再判断今天是否应上班。
+
+工作日判断优先级：
+
 1. 如果日期在 `holidays.cn.2026.json` 中：
    - `workday`：需要上班，推送。
    - `holiday`：休息，不推送。
@@ -123,6 +133,8 @@ rm ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
   "notify_mode": "makeup_only"
 }
 ```
+
+程序会在本地写入 `.workday-alarm-state.json` 记录当天是否已经推送，该文件已被 `.gitignore` 忽略。
 
 ## Bark 提醒参数
 

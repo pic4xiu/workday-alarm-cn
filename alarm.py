@@ -4,7 +4,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     "bark_base_url": "https://api.day.app",
     "title": "调休闹钟",
     "body": "今天需要上班，别睡过啦",
+    "alarm_time": "09:10",
     "notify_mode": "workdays",
     "sound": "chime",
     "level": "critical",
@@ -65,10 +66,23 @@ def parse_date(value: str) -> date:
         raise argparse.ArgumentTypeError("日期格式应为 YYYY-MM-DD") from exc
 
 
+def parse_time(value: str) -> time:
+    try:
+        return datetime.strptime(value, "%H:%M").time()
+    except ValueError as exc:
+        raise ValueError("时间格式应为 HH:MM，例如 09:10") from exc
+
+
 def today_in_timezone(tz_name: str) -> date:
     if ZoneInfo is None:
         return date.today()
     return datetime.now(ZoneInfo(tz_name)).date()
+
+
+def now_in_timezone(tz_name: str) -> datetime:
+    if ZoneInfo is None:
+        return datetime.now()
+    return datetime.now(ZoneInfo(tz_name))
 
 
 def resolve_path(path_value: str, base: Path = ROOT) -> Path:
@@ -162,16 +176,43 @@ def send_bark(url: str, timeout: int = 10) -> str:
         return response.read().decode("utf-8", errors="replace")
 
 
+def should_run_for_current_minute(now: datetime, alarm_time: time) -> bool:
+    return now.hour == alarm_time.hour and now.minute == alarm_time.minute
+
+
+def already_sent(state_path: Path, target_date: date) -> bool:
+    if not state_path.exists():
+        return False
+    try:
+        state = load_json(state_path)
+    except (OSError, json.JSONDecodeError):
+        return False
+    return state.get("last_sent_date") == target_date.isoformat()
+
+
+def mark_sent(state_path: Path, target_date: date, sent_at: datetime) -> None:
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "last_sent_date": target_date.isoformat(),
+        "last_sent_at": sent_at.isoformat(),
+    }
+    with state_path.open("w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="中国调休闹钟：判断今天是否上班，并通过 Bark 推送。")
     parser.add_argument("--config", default=str(ROOT / "config.json"), help="配置文件路径")
     parser.add_argument("--date", type=parse_date, help="测试指定日期，格式 YYYY-MM-DD")
     parser.add_argument("--dry-run", action="store_true", help="只输出判断结果，不调用 Bark")
     parser.add_argument("--force", action="store_true", help="忽略日期判断，强制发送 Bark")
+    parser.add_argument("--check-time", action="store_true", help="只在配置的 alarm_time 对应分钟内运行，用于 launchd 轮询")
     args = parser.parse_args()
 
     config_path = resolve_path(args.config, Path.cwd())
     config = load_config(config_path)
+    timezone = str(config.get("timezone", DEFAULT_CONFIG["timezone"]))
     holiday_path = resolve_path(str(config.get("holiday_file", DEFAULT_CONFIG["holiday_file"])), ROOT)
     holiday_days = load_holiday_days(holiday_path)
     notify_mode = str(config.get("notify_mode", DEFAULT_CONFIG["notify_mode"]))
@@ -179,7 +220,40 @@ def main() -> int:
     if notify_mode not in {"workdays", "makeup_only"}:
         raise ValueError("notify_mode 只能是 workdays 或 makeup_only")
 
-    target_date = args.date or today_in_timezone(str(config.get("timezone", DEFAULT_CONFIG["timezone"])))
+    now = now_in_timezone(timezone)
+    target_date = args.date or now.date()
+    alarm_time = parse_time(str(config.get("alarm_time", DEFAULT_CONFIG["alarm_time"])))
+    state_path = resolve_path(str(config.get("state_file", ".workday-alarm-state.json")), ROOT)
+
+    if args.check_time and not args.force and not args.date and not should_run_for_current_minute(now, alarm_time):
+        print(
+            json.dumps(
+                {
+                    "date": target_date.isoformat(),
+                    "should_notify": False,
+                    "reason": "非提醒时间",
+                    "alarm_time": alarm_time.strftime("%H:%M"),
+                    "now": now.strftime("%H:%M"),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
+    if args.check_time and not args.force and already_sent(state_path, target_date):
+        print(
+            json.dumps(
+                {
+                    "date": target_date.isoformat(),
+                    "should_notify": False,
+                    "reason": "今日已推送",
+                    "state_file": str(state_path),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
     decision = decide(target_date, holiday_days, notify_mode)
 
     print(
@@ -208,6 +282,8 @@ def main() -> int:
 
     url = build_bark_url(config, target_date, decision.reason)
     print(send_bark(url))
+    if args.check_time and not args.force:
+        mark_sent(state_path, target_date, now)
     return 0
 
 

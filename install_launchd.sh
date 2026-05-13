@@ -8,6 +8,8 @@ LABEL="com.local.workday-alarm-cn"
 PLIST_PATH="$HOME/Library/LaunchAgents/${LABEL}.plist"
 LOG_DIR="$HOME/Library/Logs"
 LOG_PREFIX="workday-alarm-cn"
+USER_ID="$(id -u)"
+LAUNCHD_DOMAIN="gui/${USER_ID}"
 
 if [[ ! "$TIME_VALUE" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
   echo "时间格式应为 HH:MM，例如 07:30" >&2
@@ -32,16 +34,12 @@ cat > "$PLIST_PATH" <<PLIST
   <array>
     <string>${PYTHON_BIN}</string>
     <string>${SCRIPT_DIR}/alarm.py</string>
+    <string>--check-time</string>
   </array>
   <key>WorkingDirectory</key>
   <string>${SCRIPT_DIR}</string>
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>${HOUR}</integer>
-    <key>Minute</key>
-    <integer>${MINUTE}</integer>
-  </dict>
+  <key>StartInterval</key>
+  <integer>60</integer>
   <key>StandardOutPath</key>
   <string>${LOG_DIR}/${LOG_PREFIX}.out.log</string>
   <key>StandardErrorPath</key>
@@ -52,9 +50,25 @@ cat > "$PLIST_PATH" <<PLIST
 </plist>
 PLIST
 
-launchctl unload "$PLIST_PATH" >/dev/null 2>&1 || true
-launchctl load "$PLIST_PATH"
+CONFIG_PATH="${SCRIPT_DIR}/config.json"
+if [[ -f "$CONFIG_PATH" ]]; then
+  /usr/bin/python3 - "$CONFIG_PATH" "$TIME_VALUE" <<'PY'
+import json
+import sys
+from pathlib import Path
 
-echo "已安装 ${LABEL}，每天 ${TIME_VALUE} 执行。"
+config_path = Path(sys.argv[1])
+alarm_time = sys.argv[2]
+config = json.loads(config_path.read_text(encoding="utf-8"))
+config["alarm_time"] = alarm_time
+config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+fi
+
+launchctl bootout "${LAUNCHD_DOMAIN}" "$PLIST_PATH" >/dev/null 2>&1 || true
+launchctl bootstrap "${LAUNCHD_DOMAIN}" "$PLIST_PATH"
+launchctl enable "${LAUNCHD_DOMAIN}/${LABEL}"
+
+echo "已安装 ${LABEL}，每 60 秒检查一次，每天 ${TIME_VALUE} 符合条件时推送。"
 echo "配置文件：${SCRIPT_DIR}/config.json"
 echo "日志：${LOG_DIR}/${LOG_PREFIX}.out.log"
