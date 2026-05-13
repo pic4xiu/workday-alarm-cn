@@ -74,16 +74,13 @@ def parse_time(value: str) -> time:
         raise ValueError("时间格式应为 HH:MM，例如 09:10") from exc
 
 
-def today_in_timezone(tz_name: str) -> date:
-    if ZoneInfo is None:
-        return date.today()
-    return datetime.now(ZoneInfo(tz_name)).date()
-
-
 def now_in_timezone(tz_name: str) -> datetime:
     if ZoneInfo is None:
         return datetime.now()
-    return datetime.now(ZoneInfo(tz_name))
+    try:
+        return datetime.now(ZoneInfo(tz_name))
+    except Exception as exc:
+        raise ValueError(f"timezone 无效: {tz_name}") from exc
 
 
 def resolve_path(path_value: str, base: Path = ROOT) -> Path:
@@ -193,6 +190,16 @@ def should_run_in_alarm_window(now: datetime, alarm_time: time, window_minutes: 
     return window_start <= now < window_end
 
 
+def parse_positive_int(value: Any, name: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} 必须是大于等于 1 的整数") from exc
+    if parsed < 1:
+        raise ValueError(f"{name} 必须是大于等于 1 的整数")
+    return parsed
+
+
 def already_sent(state_path: Path, target_date: date) -> bool:
     if not state_path.exists():
         return False
@@ -238,7 +245,10 @@ def main() -> int:
     now = now_in_timezone(timezone)
     target_date = args.date or now.date()
     alarm_time = parse_time(str(config.get("alarm_time", DEFAULT_CONFIG["alarm_time"])))
-    alarm_window_minutes = int(config.get("alarm_window_minutes", DEFAULT_CONFIG["alarm_window_minutes"]))
+    alarm_window_minutes = parse_positive_int(
+        config.get("alarm_window_minutes", DEFAULT_CONFIG["alarm_window_minutes"]),
+        "alarm_window_minutes",
+    )
     state_path = resolve_path(str(config.get("state_file", ".workday-alarm-state.json")), ROOT)
 
     if args.check_time and not args.force and not args.date and not should_run_in_alarm_window(now, alarm_time, alarm_window_minutes):

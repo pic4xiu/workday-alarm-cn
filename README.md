@@ -41,7 +41,7 @@ export BARK_KEY="你的BarkKey"
 
 ```bash
 mkdir -p ~/.local/share
-cp -R workday-alarm-cn ~/.local/share/workday-alarm-cn
+rsync -a --exclude .git ./ ~/.local/share/workday-alarm-cn/
 cd ~/.local/share/workday-alarm-cn
 ```
 
@@ -102,6 +102,8 @@ python3 -m unittest discover
 ```
 
 安装脚本会把目标时间写入 `config.json` 的 `alarm_time` 字段。使用每分钟检查而不是 macOS 日历触发，是为了避免部分 macOS 用户会话中 `StartCalendarInterval` 不稳定触发的问题。
+
+脚本大多数分钟会静默退出，只有进入提醒窗口后才会继续判断是否工作日并调用 Bark。
 
 默认允许 10 分钟触发窗口。比如 `alarm_time` 是 `09:10` 时，只要程序在 `09:10` 到 `09:19` 之间运行且当天尚未推送，就会发送提醒。可以通过 `alarm_window_minutes` 调整窗口长度。
 

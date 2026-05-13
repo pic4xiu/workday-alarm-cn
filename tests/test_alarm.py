@@ -3,11 +3,21 @@ from datetime import date
 from datetime import datetime
 from datetime import time
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from alarm import build_bark_url, decide, load_holiday_days, mask_bark_url, should_run_in_alarm_window
+from alarm import (
+    already_sent,
+    build_bark_url,
+    decide,
+    load_holiday_days,
+    mark_sent,
+    mask_bark_url,
+    parse_positive_int,
+    should_run_in_alarm_window,
+)
 
 
 HOLIDAYS = load_holiday_days(Path(__file__).resolve().parents[1] / "holidays.cn.2026.json")
@@ -37,6 +47,11 @@ class AlarmDecisionTests(unittest.TestCase):
         self.assertFalse(decision.should_notify)
         self.assertTrue(decision.is_workday)
 
+    def test_makeup_workday_notifies_in_makeup_only_mode(self):
+        decision = decide(date(2026, 5, 9), HOLIDAYS, "makeup_only")
+        self.assertTrue(decision.should_notify)
+        self.assertEqual(decision.reason, "调休补班日")
+
     def test_normal_weekend_does_not_notify(self):
         decision = decide(date(2026, 5, 10), HOLIDAYS, "workdays")
         self.assertFalse(decision.should_notify)
@@ -59,6 +74,22 @@ class AlarmDecisionTests(unittest.TestCase):
         masked = mask_bark_url(url, config)
         self.assertIn("/***/", masked)
         self.assertNotIn("secret-key", masked)
+
+    def test_mark_sent_and_already_sent(self):
+        with TemporaryDirectory() as tmp_dir:
+            state_path = Path(tmp_dir) / "state.json"
+            target = date(2026, 5, 13)
+            self.assertFalse(already_sent(state_path, target))
+            mark_sent(state_path, target, datetime(2026, 5, 13, 9, 10))
+            self.assertTrue(already_sent(state_path, target))
+            self.assertFalse(already_sent(state_path, date(2026, 5, 14)))
+
+    def test_parse_positive_int(self):
+        self.assertEqual(parse_positive_int("10", "alarm_window_minutes"), 10)
+        with self.assertRaisesRegex(ValueError, "alarm_window_minutes"):
+            parse_positive_int("abc", "alarm_window_minutes")
+        with self.assertRaisesRegex(ValueError, "alarm_window_minutes"):
+            parse_positive_int(0, "alarm_window_minutes")
 
 
 if __name__ == "__main__":

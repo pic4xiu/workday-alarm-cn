@@ -16,9 +16,6 @@ if [[ ! "$TIME_VALUE" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
   exit 1
 fi
 
-HOUR="${TIME_VALUE%:*}"
-MINUTE="${TIME_VALUE#*:}"
-
 mkdir -p "$HOME/Library/LaunchAgents" "$LOG_DIR"
 
 cat > "$PLIST_PATH" <<PLIST
