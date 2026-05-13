@@ -91,6 +91,13 @@ class AlarmDecisionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "alarm_window_minutes"):
             parse_positive_int(0, "alarm_window_minutes")
 
+    def test_holiday_data_shape(self):
+        self.assertTrue(HOLIDAYS)
+        for day, kind in HOLIDAYS.items():
+            parsed = date.fromisoformat(day)
+            self.assertEqual(parsed.year, 2026)
+            self.assertIn(kind, {"holiday", "workday"})
+
 
 if __name__ == "__main__":
     unittest.main()

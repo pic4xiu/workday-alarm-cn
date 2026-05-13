@@ -1,45 +1,30 @@
 # workday-alarm-cn
 
-一个跑在 Mac mini 上的中国调休闹钟：每天固定时间判断今天是否需要上班，如果需要，就通过 Bark HTTP API 推送到 iPhone。
+China holiday-aware workday alarm for macOS, powered by Bark.
 
-当前内置 2026 年中国法定节假日和调休补班数据。
+`workday-alarm-cn` solves a small but annoying problem: iPhone weekday alarms do not understand China makeup workdays. This project runs on a Mac mini or any macOS machine, checks whether today should be treated as a workday, and sends a Bark notification when it is time to wake up.
 
-## 文件说明
+Current bundled holiday data covers China's 2026 public holidays and makeup workdays.
 
-- `alarm.py`：主程序，负责判断日期并调用 Bark。
-- `config.example.json`：配置示例。
-- `holidays.cn.2026.json`：2026 年中国法定节假日和调休补班表。
-- `install_launchd.sh`：生成并加载 macOS launchd 定时任务。
-- `tests/test_alarm.py`：核心判断逻辑测试。
-- `LICENSE`：MIT License。
+## Features
 
-## 快速开始
+- China holiday and makeup workday aware.
+- Bark notification support.
+- macOS launchd installer.
+- 10-minute alarm window to tolerate delayed wakeups.
+- Once-per-day state file to avoid duplicate notifications.
+- Secret-safe dry runs: Bark key is masked by default.
+- No third-party Python dependency.
 
-复制配置文件：
+## Requirements
 
-```bash
-cp config.example.json config.json
-```
+- macOS.
+- Python 3.
+- Bark app and Bark key.
 
-编辑 `config.json`，填入你的 Bark key：
+## Quick Start
 
-```json
-{
-  "bark_key": "你的BarkKey"
-}
-```
-
-`config.json` 包含个人 Bark key，已被 `.gitignore` 忽略，请不要提交到公开仓库。
-
-手动测试时也可以不写入配置文件，改用环境变量：
-
-```bash
-export BARK_KEY="你的BarkKey"
-```
-
-定时任务建议写入 `config.json`。launchd 后台任务不会自动继承你在 shell 里临时 `export` 的环境变量。
-
-建议把项目放在非 `~/Documents`、`~/Desktop`、`~/Downloads` 的目录中运行，例如：
+Clone or copy the project, then keep the runnable copy outside macOS privacy-protected folders such as `~/Documents`, `~/Desktop`, and `~/Downloads`:
 
 ```bash
 mkdir -p ~/.local/share
@@ -47,154 +32,174 @@ rsync -a --exclude .git ./ ~/.local/share/workday-alarm-cn/
 cd ~/.local/share/workday-alarm-cn
 ```
 
-macOS 可能会限制 launchd 后台任务访问 `Documents` 等隐私保护目录。
+Create local config:
 
-## 手动测试
+```bash
+cp config.example.json config.json
+```
 
-只判断，不真正推送：
+Edit `config.json` and set your Bark key:
+
+```json
+{
+  "bark_key": "your-bark-key"
+}
+```
+
+Install the launchd job. This example checks every minute and sends the alarm during the `09:10` alarm window when today is a workday:
+
+```bash
+./install_launchd.sh 09:10
+```
+
+## Manual Testing
+
+Check a makeup workday without sending:
 
 ```bash
 python3 alarm.py --date 2026-05-09 --dry-run
 ```
 
-`--dry-run` 默认会隐藏 Bark key。如果确实需要查看完整 URL，可以加：
+`--dry-run` masks the Bark key by default. To print the full URL:
 
 ```bash
 python3 alarm.py --date 2026-05-09 --dry-run --show-secret-url
 ```
 
-测试普通休息日：
-
-```bash
-python3 alarm.py --date 2026-05-10 --dry-run
-```
-
-真正发送一条测试推送：
+Send a real test notification:
 
 ```bash
 python3 alarm.py --date 2026-05-09
 ```
 
-强制发送测试推送：
+Force a notification even on a non-workday:
 
 ```bash
 python3 alarm.py --date 2026-05-10 --force
 ```
 
-`--force` 会忽略日期判断并发送推送，适合测试 Bark；输出里的原因仍然会保留原始判断结果，例如“普通周末”。
-
-运行测试：
+Run tests:
 
 ```bash
 python3 -m unittest discover
 ```
 
-## 安装定时任务
+## Configuration
 
-默认每 60 秒检查一次，并在每天 `07:30` 符合条件时推送：
+`config.example.json` contains all supported options:
 
-```bash
-./install_launchd.sh
+```json
+{
+  "bark_key": "",
+  "bark_base_url": "https://api.day.app",
+  "title": "调休闹钟",
+  "body": "今天需要上班，别睡过啦",
+  "alarm_time": "09:10",
+  "alarm_window_minutes": 10,
+  "notify_mode": "workdays",
+  "sound": "chime",
+  "level": "critical",
+  "volume": "5",
+  "call": "1",
+  "group": "shift-alarm",
+  "timezone": "Asia/Shanghai",
+  "holiday_file": "holidays.cn.2026.json"
+}
 ```
 
-指定时间：
+Important options:
 
-```bash
-./install_launchd.sh 07:15
-```
+- `alarm_time`: Alarm window start time in `HH:MM`.
+- `alarm_window_minutes`: Window length. With `09:10` and `10`, any run from `09:10` to `09:19` can send the notification.
+- `notify_mode`: `workdays` sends on all workdays; `makeup_only` sends only on makeup workdays.
+- `level`, `volume`, `call`: Bark critical-alert options. Remove them for normal notifications.
 
-如果 `config.json` 不存在，安装脚本会从 `config.example.json` 创建一份。安装脚本会把目标时间写入 `config.json` 的 `alarm_time` 字段。使用每分钟检查而不是 macOS 日历触发，是为了避免部分 macOS 用户会话中 `StartCalendarInterval` 不稳定触发的问题。
+Manual tests can use `BARK_KEY`, but launchd jobs do not automatically inherit shell exports. For scheduled alarms, write `bark_key` into `config.json`.
 
-脚本大多数分钟会静默退出，只有进入提醒窗口后才会继续判断是否工作日并调用 Bark。
+## How Scheduling Works
 
-默认允许 10 分钟触发窗口。比如 `alarm_time` 是 `09:10` 时，只要程序在 `09:10` 到 `09:19` 之间运行且当天尚未推送，就会发送提醒。可以通过 `alarm_window_minutes` 调整窗口长度。
-
-安装后会生成：
+The installer writes a user LaunchAgent:
 
 ```text
 ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
 ```
 
-日志在：
+The job runs every 60 seconds:
+
+```bash
+python3 alarm.py --check-time
+```
+
+Most runs exit silently. The script only continues when:
+
+1. Current time is inside the configured alarm window.
+2. Today's notification has not already been sent.
+3. Today is considered a workday.
+
+This interval-based design avoids `StartCalendarInterval` reliability issues observed in some macOS user sessions.
+
+Logs:
 
 ```text
 ~/Library/Logs/workday-alarm-cn.out.log
 ~/Library/Logs/workday-alarm-cn.err.log
 ```
 
-卸载定时任务：
+Verbose debugging:
+
+```bash
+python3 alarm.py --check-time --verbose
+```
+
+## Workday Rules
+
+The decision order is:
+
+1. If the date is in `holidays.cn.2026.json`:
+   - `workday`: send.
+   - `holiday`: do not send.
+2. Otherwise:
+   - Monday to Friday: send.
+   - Saturday or Sunday: do not send.
+
+The script writes `.workday-alarm-state.json` locally after a successful scheduled notification to prevent duplicate sends on the same day.
+
+## Uninstall
 
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
 rm ~/Library/LaunchAgents/com.local.workday-alarm-cn.plist
 ```
 
-## 运行策略
+## Troubleshooting
 
-判断优先级：
+If nothing happens:
 
-1. launchd 每 60 秒运行一次 `alarm.py --check-time`。
-2. 程序先判断当前时间是否落在 `config.json` 中 `alarm_time` 开始的提醒窗口内。
-3. 如果不在提醒窗口，静默退出。
-4. 如果今天已经推送过，静默退出，避免同一天重复提醒。
-5. 如果进入目标分钟，再判断今天是否应上班。
-
-静默检查默认不写日志，避免每分钟产生大量输出。需要调试时可以手动运行：
+- Keep the project outside `~/Documents`, `~/Desktop`, and `~/Downloads`.
+- Check `~/Library/Logs/workday-alarm-cn.err.log`.
+- Run `python3 alarm.py --date 2026-05-09 --dry-run`.
+- Confirm Bark critical alerts are allowed on iPhone if using `level=critical`.
+- Confirm the LaunchAgent is loaded:
 
 ```bash
-python3 alarm.py --check-time --verbose
+launchctl print gui/$(id -u)/com.local.workday-alarm-cn
 ```
 
-工作日判断优先级：
+## Security And Privacy
 
-1. 如果日期在 `holidays.cn.2026.json` 中：
-   - `workday`：需要上班，推送。
-   - `holiday`：休息，不推送。
-2. 如果日期不在节假日表中：
-   - 周一到周五：需要上班，推送。
-   - 周六周日：休息，不推送。
+- `config.json` contains your Bark key and is ignored by Git.
+- `--dry-run` masks the Bark key by default.
+- `--show-secret-url` prints the full Bark URL. Avoid sharing that output.
+- Default logs do not include the Bark key.
 
-默认会在所有“应上班日”推送。如果你只想在周末调休补班时推送，把 `config.json` 中的 `notify_mode` 改成：
+## Holiday Data
 
-```json
-{
-  "notify_mode": "makeup_only"
-}
-```
-
-程序会在本地写入 `.workday-alarm-state.json` 记录当天是否已经推送，该文件已被 `.gitignore` 忽略。
-
-## Bark 提醒参数
-
-示例配置默认开启：
-
-```json
-{
-  "level": "critical",
-  "volume": "5",
-  "call": "1"
-}
-```
-
-含义：
-
-- `level=critical`：使用 Bark 关键提醒，可能绕过静音和专注模式，需要 iPhone 上允许 Bark 的关键提醒权限。
-- `volume=5`：关键提醒音量，范围通常为 `0` 到 `10`。
-- `call=1`：连续播放提醒音，适合闹钟场景。
-
-如果不想使用关键提醒，可以从 `config.json` 中删除 `level`、`volume` 和 `call`。
-
-## 安全和隐私
-
-- `config.json` 包含 Bark key，已被 `.gitignore` 忽略，不应提交到公开仓库。
-- `--dry-run` 默认隐藏 Bark key。
-- `--show-secret-url` 会显示完整 Bark URL，分享日志或截图前请谨慎使用。
-- 默认日志不会输出 Bark key；只有提醒判断结果和 Bark API 响应。
-
-## 数据来源
-
-2026 年节假日数据来自中国政府网：
+2026 holiday data comes from the State Council notice published on gov.cn:
 
 https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm
 
-后续年份需要新增或替换对应年份的节假日数据文件，并在 `config.json` 中调整 `holiday_file`。
+Future years require adding or replacing the corresponding holiday data file and updating `holiday_file` in `config.json`.
+
+## License
+
+MIT
